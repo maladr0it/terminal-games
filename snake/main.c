@@ -1,69 +1,40 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <termios.h>
-
-static struct termios originalTermios;
-
-static void die(const char *s)
-{
-    perror(s);
-    exit(1);
-}
-
-static void disableRawMode(void)
-{
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &originalTermios) == -1)
-    {
-        die("tcsetattr");
-    }
-}
-
-static void enableRawMode(void)
-{
-    if (tcgetattr(STDIN_FILENO, &originalTermios) == -1)
-    {
-        die("tcsgetattr");
-    }
-
-    struct termios raw = originalTermios;
-    raw.c_iflag &= ~(ICRNL | IXON);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = -1; // wait forever for input
-
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
-    {
-        die("tcsetattr");
-    }
-}
+#include <stdbool.h>
+#include "term.h"
 
 int main(void)
 {
-    enableRawMode();
-    atexit(disableRawMode);
+    term_init();
 
-    while (1)
+    bool running = true;
+
+    while (running)
     {
-        char c = '\0';
-        if (read(STDIN_FILENO, &c, 1) == -1)
-        {
-            die("read");
-        }
+        enum term_input input = term_getInput();
 
-        if (iscntrl(c))
+        switch (input)
         {
-            printf("%d\r\n", c);
-        }
-        else
-        {
-            printf("%d ('%c')\r\n", c, c);
-        }
-        if (c == 'q')
-        {
+        case TERM_ESCAPE:
+            running = false;
+            break;
+        case TERM_UP:
+            term_write("user pressed up");
+            break;
+        case TERM_RIGHT:
+            term_write("user pressed right");
+            break;
+        case TERM_DOWN:
+            term_write("user pressed down");
+            break;
+        case TERM_LEFT:
+            term_write("user pressed left");
+            break;
+        default:
             break;
         }
+
+        term_render();
     }
 
     return 0;
