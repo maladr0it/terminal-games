@@ -2,5 +2,14 @@
     "editor.tabSize": 4,
     "editor.detectIndentation": false,
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "ms-vscode.cpptools"
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "files.associations": {
+        "__bit_reference": "c",
+        "__string": "c",
+        "algorithm": "c",
+        "deque": "c",
+        "ios": "c",
+        "string": "c",
+        "type_traits": "c"
+    }
 }

@@ -8,69 +8,56 @@
 
 // 1MB
 #define TERM_BUFFER_SIZE 1024 * 1024
-#define TERM_INPUT_TIMEOUT 1
+#define TERM_INPUT_TIMEOUT 0
 
 struct term
 {
     struct termios defaultTermios;
-    char *cursor;
-    char *buffer;
 };
 
 static struct term gTerm;
 
 static void term_handleError(const char *s)
 {
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    write(STDOUT_FILENO, "\x1b[2J", 4);   // clear screen
+    write(STDOUT_FILENO, "\x1b[H", 3);    // move cursor to start
+    write(STDOUT_FILENO, "\x1b[?25h", 6); // show cursor
     perror(s);
     exit(1);
 }
 
 static void term_destroy(void)
 {
+
+    write(STDOUT_FILENO, "\x1b[2J", 4);   // clear screen
+    write(STDOUT_FILENO, "\x1b[H", 3);    // move cursor to start
+    write(STDOUT_FILENO, "\x1b[?25h", 6); // show cursor
     // restore initial terminal settings
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &gTerm.defaultTermios) == -1)
     {
         term_handleError("tcsetattr");
     }
-    free(gTerm.buffer);
 }
 
-void term_write(char *s)
+void term_render(char *str, int len)
 {
-    char *p = s;
-    do
-    {
-        *gTerm.cursor++ = *p++;
-    } while (*p != '\0');
-}
-
-void term_render(void)
-{
-    term_write("\x1b[?25h"); // show cursor
-    write(STDOUT_FILENO, gTerm.buffer, gTerm.cursor - gTerm.buffer);
-    gTerm.cursor = gTerm.buffer;
-
-    // queue up commands for next render
-    term_write("\x1b[?25l"); // hide cursor
-    term_write("\x1b[2J");   // clear screen
-    term_write("\x1b[H");    // move cursor to start
+    write(STDOUT_FILENO, "\x1b[2J", 4); // clear screen
+    write(STDOUT_FILENO, "\x1b[H", 3);  // move cursor to start
+    write(STDOUT_FILENO, str, sizeof(char) * len);
 }
 
 enum term_input term_getInput()
 {
-    // check until we get a 1 size input
     char c;
-    while (read(STDIN_FILENO, &c, 1) != 1)
+    if (read(STDIN_FILENO, &c, 1) != 1)
     {
-        // read until we get an input
+        return TERM_NONE;
     }
 
     // if char was a control char, read the next few
     if (c == '\x1b')
     {
-        char sequence[3];
+        char sequence[2];
         if (read(STDIN_FILENO, &sequence[0], 1) != 1)
         {
             return TERM_ESCAPE;
@@ -100,6 +87,12 @@ enum term_input term_getInput()
         return TERM_UNRECOGNIZED;
     }
 
+    switch (c)
+    {
+    case '\r':
+        return TERM_ENTER;
+    }
+
     return TERM_UNRECOGNIZED;
 }
 
@@ -122,13 +115,7 @@ void term_init(void)
         term_handleError("tcsetattr");
     }
 
-    gTerm.buffer = malloc(sizeof(*gTerm.buffer) * TERM_BUFFER_SIZE);
-    if (gTerm.buffer == NULL)
-    {
-        term_handleError("malloc");
-    }
-    gTerm.cursor = gTerm.buffer;
-    term_render();
+    write(STDOUT_FILENO, "\x1b[?25l", 6); // hide cursor
 
     atexit(term_destroy);
 }

@@ -3,4 +3,4 @@
 rm -rf build
 mkdir build
 
-clang -g -Wall -O1 $1/**.c -o build/main
+clang -g -Wall -O3 $1/**.c -o build/main
