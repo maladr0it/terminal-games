@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include "term.h"
+#include <time.h>
+#include "../lib/term.h"
 
 #define MAP_WIDTH 16
 #define MAP_HEIGHT 8
@@ -24,28 +25,11 @@ enum direction
     LEFT,
 };
 
-enum mapTile
-{
-    TILE_EMPTY,
-    TILE_SNAKE,
-    TILE_FOOD,
-};
-
 enum gameState
 {
     STATE_PLAYING,
     STATE_GAME_OVER,
 };
-
-enum term_input input;
-char canvas[CANVAS_HEIGHT * CANVAS_WIDTH];
-enum gameState state;
-int score;
-struct pos snake[MAP_HEIGHT * MAP_WIDTH];
-int snakeLen;
-enum direction dir;
-struct pos food;
-enum mapTile map[MAP_HEIGHT * MAP_WIDTH];
 
 static char *string_write(char *out, char *str)
 {
@@ -69,8 +53,14 @@ static int randRange(int upper)
     return ((float)rand() / RAND_MAX) * upper;
 }
 
-static struct pos getFoodSpawn(enum mapTile *map)
+static struct pos getFoodSpawn(struct pos *snake, int snakeLen)
 {
+    char map[MAP_HEIGHT][MAP_WIDTH] = {};
+    for (int i = 0; i < snakeLen; ++i)
+    {
+        map[snake[i].y][snake[i].x] = 1;
+    }
+
     struct pos emptySpaces[MAP_HEIGHT * MAP_WIDTH];
     int numEmptySpaces = 0;
 
@@ -78,7 +68,7 @@ static struct pos getFoodSpawn(enum mapTile *map)
     {
         for (int j = 0; j < MAP_WIDTH; ++j)
         {
-            if (map[i * MAP_WIDTH + j] == TILE_EMPTY)
+            if (map[i][j] == 0)
             {
                 struct pos p = {.x = j, .y = i};
                 emptySpaces[numEmptySpaces++] = p;
@@ -89,30 +79,25 @@ static struct pos getFoodSpawn(enum mapTile *map)
     return emptySpaces[randRange(numEmptySpaces)];
 }
 
-static void createMap(enum mapTile *map, struct pos *snake, int snakeLen)
-{
-    for (int i = 0; i < MAP_HEIGHT; ++i)
-    {
-        for (int j = 0; j < MAP_WIDTH; ++j)
-        {
-            map[i * MAP_WIDTH + j] = TILE_EMPTY;
-        }
-    }
-    for (int i = 0; i < snakeLen; ++i)
-    {
-        map[snake[i].y * MAP_WIDTH + snake[i].x] = TILE_SNAKE;
-    }
-}
-
 int main(void)
 {
     term_init();
 
+    time_t t;
+    srand((unsigned)(time(&t)));
+    enum term_input input;
+    char canvas[CANVAS_HEIGHT * CANVAS_WIDTH];
+
+    enum gameState state;
+    int score;
+    struct pos snake[MAP_HEIGHT * MAP_WIDTH];
+    int snakeLen;
+    enum direction dir;
+    struct pos food;
+
 game_start:
     state = STATE_PLAYING;
     score = 0;
-    dir = LEFT;
-
     snake[0].x = MAP_WIDTH / 2;
     snake[0].y = MAP_HEIGHT / 2;
     snake[1].x = MAP_WIDTH / 2 + 1;
@@ -122,15 +107,12 @@ game_start:
     snake[3].x = MAP_WIDTH / 2 + 3;
     snake[3].y = MAP_HEIGHT / 2;
     snakeLen = 4;
-
-    createMap(map, snake, snakeLen);
-    food = getFoodSpawn(map);
-    map[food.y * MAP_WIDTH + food.x] = TILE_FOOD;
+    dir = LEFT;
+    food = getFoodSpawn(snake, snakeLen);
 
     while (true)
     {
     game_loop:
-
         input = term_getInput();
 
         if (state == STATE_PLAYING)
@@ -205,7 +187,8 @@ game_start:
             {
                 ++snakeLen;
                 score += 1;
-                if (snakeLen >= MAP_HEIGHT * MAP_WIDTH - 1)
+                // the map will be entirely filled with the snake
+                if (snakeLen >= MAP_HEIGHT * MAP_WIDTH)
                 {
                     state = STATE_GAME_OVER;
                     goto game_loop;
@@ -220,17 +203,13 @@ game_start:
             }
             snake[0] = newPos;
 
-            // create map
-            createMap(map, snake, snakeLen);
             if (foodEaten)
             {
-                food = getFoodSpawn(map);
+                food = getFoodSpawn(snake, snakeLen);
             }
-            map[food.y * MAP_WIDTH + food.x] = TILE_FOOD;
         }
         else if (state == STATE_GAME_OVER)
         {
-            // handle input
             switch (input)
             {
             case TERM_ESCAPE:
@@ -246,45 +225,49 @@ game_start:
         // Render
         //
         char *pCanvas = canvas;
-        char scoreStr[CANVAS_WIDTH];
-        sprintf(scoreStr, "score: %d\n", score);
-        pCanvas = string_write(pCanvas, scoreStr);
 
+        // draw score
+        char scoreStr[CANVAS_WIDTH];
+        int scoreStrLen = sprintf(scoreStr, "score: %d", score);
+        pCanvas = string_write(pCanvas, scoreStr);
+        for (int i = 0; i < CANVAS_WIDTH - 1 - scoreStrLen; ++i)
+        {
+            *pCanvas++ = ' ';
+        }
+        *pCanvas++ = '\n';
+
+        // draw empty map
         for (int i = 0; i < MAP_WIDTH + 2; ++i)
         {
-            pCanvas = string_write(pCanvas, "+");
+            *pCanvas++ = '+';
         }
-
-        pCanvas = string_write(pCanvas, "\n");
+        *pCanvas++ = '\n';
 
         for (int i = 0; i < MAP_HEIGHT; ++i)
         {
-            pCanvas = string_write(pCanvas, "+");
+            *pCanvas++ = '+';
 
             for (int j = 0; j < MAP_WIDTH; ++j)
             {
-                switch (map[i * MAP_WIDTH + j])
-                {
-                case TILE_EMPTY:
-                    *pCanvas = ' ';
-                    break;
-                case TILE_SNAKE:
-                    *pCanvas = '#';
-                    break;
-                case TILE_FOOD:
-                    *pCanvas = '*';
-                    break;
-                }
-                ++pCanvas;
+                *pCanvas++ = ' ';
             }
-
-            pCanvas = string_write(pCanvas, "+\n");
+            *pCanvas++ = '+';
+            *pCanvas++ = '\n';
         }
 
         for (int i = 0; i < MAP_WIDTH + 2; ++i)
         {
-            pCanvas = string_write(pCanvas, "+");
+            *pCanvas++ = '+';
         }
+
+        // draw snake
+        for (int i = 0; i < snakeLen; ++i)
+        {
+            canvas[(snake[i].y + 2) * CANVAS_WIDTH + (snake[i].x + 1)] = '#';
+        }
+
+        // draw food
+        canvas[(food.y + 2) * CANVAS_WIDTH + (food.x + 1)] = '*';
 
         term_render(canvas, pCanvas - canvas);
         usleep(FRAME_TIME);

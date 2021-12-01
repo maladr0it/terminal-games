@@ -6,8 +6,6 @@
 #include <termios.h>
 #include "term.h"
 
-// 1MB
-#define TERM_BUFFER_SIZE 1024 * 1024
 #define TERM_INPUT_TIMEOUT 0
 
 struct term
